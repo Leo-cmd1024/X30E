@@ -1,0 +1,94 @@
+name: Build ImmortalWrt for Ruijie RG-X30E
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Device profile (firmware2 = flash into backup partition, keep stock in main)'
+        required: true
+        default: 'ruijie_rg-x30e-firmware2'
+        type: choice
+        options:
+          - ruijie_rg-x30e-firmware2
+          - ruijie_rg-x30e
+          - ruijie_rg-x30e-stock
+  push:
+    branches: [main]
+
+env:
+  REPO_URL: https://github.com/RuijieNetworksCommunity/immortalwrt-mt798x
+  REPO_BRANCH: openwrt-21.02
+  DEVICE: ruijie_rg-x30e-firmware2
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/lib/jvm /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git \
+            libncurses-dev libssl-dev python3 python3-distutils rsync unzip zlib1g-dev file wget \
+            subversion patch autoconf automake autopoint binutils cpio device-tree-compiler \
+            libelf-dev libglib2.0-dev libgmp-dev libltdl-dev libmpc-dev libmpfr-dev libtool \
+            ninja-build p7zip-full pkgconf python3-pip python3-ply python3-docutils qemu-utils \
+            re2c squashfs-tools swig texinfo uglifyjs xmlto xxd libreadline-dev ccache curl
+          # Optional deps: tolerate missing packages instead of failing the whole install
+          for p in libncurses5-dev libncursesw5-dev python2.7 genisoimage xorriso haveged \
+                   intltool lrzsz msmtp antlr3 asciidoc help2man upx-ucl ecj fastjar \
+                   lib32gcc-s1 libc6-dev-i386; do
+            sudo apt-get install -y "$p" >/dev/null 2>&1 || echo "skip: $p"
+          done
+
+      - name: Clone source
+        run: |
+          git clone --depth=1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Build config
+        run: |
+          cd openwrt
+          cp defconfig/mt7981-ax3000.config .config
+          # Disable every device, then re-enable only the target one.
+          # Without this the config builds 30+ mt7981 boards and blows the disk/time budget.
+          sed -i 's|^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_.*=y$|# disabled|' .config
+          {
+            echo "CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_${DEVICE}=y"
+            echo "CONFIG_TARGET_DEVICE_PACKAGES_mediatek_mt7981_DEVICE_${DEVICE}=\"\""
+          } >> .config
+          make defconfig
+          echo "=== Selected device ==="
+          grep -E '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_.*=y' .config || true
+
+      - name: Download sources
+        run: |
+          cd openwrt
+          make download -j8 || make download -j1 V=s
+
+      - name: Build
+        run: |
+          cd openwrt
+          echo "Building with $(nproc) threads"
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Upload firmware
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: x30e-immortalwrt
+          path: openwrt/bin/targets/mediatek/mt7981/
+          if-no-files-found: warn
