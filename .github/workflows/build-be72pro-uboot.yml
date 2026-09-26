@@ -1,0 +1,171 @@
+name: Build BE72 Pro U-Boot (FIP)
+
+# 产出 Ruijie RG-BE72 Pro 的第三方 U-Boot（FIP），用来替换原厂引导，
+# 从而解锁 ubi-232.5m 分区，之后才能刷 ImmortalWrt。
+#
+# 源码：RuijieNetworksCommunity/bl-mt798x @ bl-798x-mod
+#   板级定义（已存在，公开）：
+#     uboot-mtk-20230718-09eda825/configs/mt7988_ruijie_be72_pro_defconfig
+#     uboot-mtk-20230718-09eda825/configs/mt7988_ruijie_be72_pro_multi_layout_defconfig
+#     uboot-mtk-20230718-09eda825/arch/arm/dts/mt7988-ruijie-be72-pro.dts
+#   ATF：MT7988 平台在 atf-20240117-bacca82a8，但该目录缺 BE72 Pro 的 ATF 配置
+#        （be72 的 ATF defconfig 错误地放在没有 mt7988 plat 的 atf-20220606 里）
+#        → 用 MTK mt7988 spim-nand 参考配置补齐，见 "Patch ATF config" 步骤
+
+on:
+  workflow_dispatch:
+    inputs:
+      multi_layout:
+        description: '分区样式 (0=fixed-parts 配非mod固件 / 1=再加multi-layout 配mod固件 / 2=两个都编)'
+        required: true
+        default: '2'
+        type: choice
+        options:
+          - '2'
+          - '0'
+          - '1'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-be72pro-uboot.yml'
+      - 'be72pro/**'
+
+permissions:
+  contents: write
+
+env:
+  BL_REPO: https://github.com/RuijieNetworksCommunity/bl-mt798x.git
+  BL_BRANCH: bl-798x-mod
+  SOC: mt7988
+  BOARD: ruijie_be72_pro
+  ATF_DIR: atf-20240117-bacca82a8
+  UBOOT_DIR: uboot-mtk-20230718-09eda825
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: Build FIP
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install cross toolchain
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            gcc-aarch64-linux-gnu build-essential flex bison libssl-dev \
+            device-tree-compiler qemu-user-static bc python3 uuid-dev
+          aarch64-linux-gnu-gcc --version | head -1
+
+      - name: Clone U-Boot / ATF source
+        run: |
+          git clone --depth=1 -b "$BL_BRANCH" "$BL_REPO" bl-mt798x
+          cd bl-mt798x
+          echo "=== 构建脚本目标目录 ==="
+          grep -nE '^(ATF_DIR|UBOOT_DIR)=' build.sh
+          echo "=== U-Boot 板级配置 ==="
+          ls -l "$UBOOT_DIR/configs/${SOC}_${BOARD}_defconfig" \
+                "$UBOOT_DIR/configs/${SOC}_${BOARD}_multi_layout_defconfig" \
+                "$UBOOT_DIR/arch/arm/dts/mt7988-ruijie-be72-pro.dts"
+
+      - name: Patch ATF config for BE72 Pro
+        run: |
+          cd bl-mt798x
+          BE72_ATF="$ATF_DIR/configs/${SOC}_${BOARD}_defconfig"
+          if [ -f "$BE72_ATF" ]; then
+            echo "ATF 配置已存在，直接用"
+          else
+            echo "ATF 配置缺失 → 用 mt7988 spim-nand 参考配置补齐"
+            cp "$ATF_DIR/configs/mt7988_rfb_spim_nand_defconfig" "$BE72_ATF"
+          fi
+          echo "--- $BE72_ATF ---"
+          cat "$BE72_ATF"
+
+      - name: Build FIP
+        run: |
+          cd bl-mt798x
+          chmod +x build.sh
+          case "${{ inputs.multi_layout || '2' }}" in
+            0) ML_LIST="0" ;;
+            1) ML_LIST="1" ;;
+            *) ML_LIST="0 1" ;;
+          esac
+          echo "构建 MULTI_LAYOUT: $ML_LIST"
+          FAIL=0
+          for ML in $ML_LIST; do
+            echo "================= MULTI_LAYOUT=$ML ================="
+            if SOC="$SOC" BOARD="$BOARD" MULTI_LAYOUT="$ML" ./build.sh 2>&1 | tee "/tmp/build-ml${ML}.log"; then
+              echo ">>> MULTI_LAYOUT=$ML 编译成功"
+            else
+              echo ">>> MULTI_LAYOUT=$ML 编译失败"
+              FAIL=1
+            fi
+          done
+          echo "=== output 目录 ==="
+          ls -l output/ || true
+          if [ ! -s output/*-fip*.bin ]; then
+            echo "::error::没有产出任何 fip，看 /tmp/build-ml*.log"
+            exit 1
+          fi
+          if [ "$FAIL" = "1" ]; then
+            echo "::warning::部分变体编译失败，已产出可用的 fip"
+          fi
+
+      - name: Verify FIP
+        run: |
+          cd bl-mt798x/output
+          echo "=== 文件列表 ==="
+          ls -l
+          echo "=== SHA256 ==="
+          sha256sum *
+          echo "=== 头部与容量校验（FIP 分区 = 2 MiB） ==="
+          for f in *-fip*.bin; do
+            SZ=$(stat -c%s "$f")
+            echo "--- $f  ($SZ bytes)"
+            xxd -l 64 "$f"
+            if [ "$SZ" -gt 2097152 ]; then
+              echo "::error::$f 超过 2097152 字节，写不进 FIP 分区"
+              exit 1
+            fi
+            if [ "$SZ" -lt 102400 ]; then
+              echo "::error::$f 小于 100KB，不像完整镜像"
+              exit 1
+            fi
+          done
+          echo "OK：全部 fip 都在 2MiB 分区容量内"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: be72pro-uboot-fip
+          path: |
+            bl-mt798x/output/
+            /tmp/build-ml0.log
+            /tmp/build-ml1.log
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: be72pro-fip-${{ github.run_number }}
+          name: BE72 Pro U-Boot FIP #${{ github.run_number }}
+          prerelease: true
+          files: bl-mt798x/output/*
+          body: |
+            ### Ruijie RG-BE72 Pro 第三方 U-Boot (FIP)
+
+            源码：`RuijieNetworksCommunity/bl-mt798x` @ `bl-798x-mod`
+            板级：`mt7988_ruijie_be72_pro`（MT7988DV / Filogic 860）
+
+            | 产物 | 配套固件 | 说明 |
+            |---|---|---|
+            | `...-fip-fixed-parts.bin` | `ruijie_rg-be72-pro`（非 mod） | ubi 保持 112.5M，最保守 |
+            | `...-fip-fixed-parts-multi-layout.bin` | `ruijie_rg-be72-pro-mod` | 可选 ubi-232.5m，闪存利用最大化 |
+
+            **只刷 FIP。不要刷出包里的 bl2。** 原厂 BL2（mtd1）保留不动，
+            DDR 初始化参数继续由原厂 BL2 负责，这是本方案风险可控的关键。
+
+            刷写前必须已完成 8 个分区备份（mtd0~mtd7）。

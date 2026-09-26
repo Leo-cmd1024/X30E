@@ -1,0 +1,177 @@
+name: Build BE72 Pro Firmware (ImmortalWrt)
+
+# 从源码云编译 Ruijie RG-BE72 Pro 的 ImmortalWrt 固件包。
+#
+# 源码：RuijieNetworksCommunity/MT798X-6.6-24.10 @ mt798x-mt799x-mtwifi_be72pro_be68u
+#   —— 这个分支就是社区给 BE72 Pro / BE68 Ultra 专门开的分支，
+#      target/linux/mediatek/image/filogic.mk 里同时有：
+#        ruijie_rg-be72-pro           (非 mod，配 fixed-parts FIP)
+#        ruijie_rg-be72-pro-mod       (U-Boot mod，配 multi-layout FIP)
+#        ruijie_rg-be72-pro-dsa-mod   (DSA 驱动版)
+#        ruijie_rg-be68-ultra[-mod|-dsa-mod]
+#
+# 注意：该分支的官方 CI 会 clone 两个【私有】驱动仓库
+#   (rtl837x-gsw-driver / rtl837x-dsa-driver，走 SSH 部署密钥)。
+#   本工作流不依赖它们 —— 依据是第三方仓库 y9858/be72pro 在同一分支上
+#   不加这两个仓库也能编译成功并发布固件。若将来编译报缺驱动，
+#   把它们的公开 fork 地址加到下面 DIY_EXTRA 里即可。
+#
+# 手动触发（Actions 页面 Run workflow），不要设 push 自动触发 —— 一次 2~6 小时。
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: '设备 profile'
+        required: true
+        default: 'ruijie_rg-be72-pro'
+        type: choice
+        options:
+          - ruijie_rg-be72-pro          # 非 mod，配 fixed-parts FIP，ubi 112.5M
+          - ruijie_rg-be72-pro-mod      # U-Boot mod，配 multi-layout FIP，ubi 可选 232.5M
+          - ruijie_rg-be72-pro-dsa-mod  # DSA 交换驱动版
+      with_diy:
+        description: '是否套用 diy.sh 定制（主题/lucky/openlist2/nikki 等）'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+permissions:
+  contents: write
+
+env:
+  REPO_URL: https://github.com/RuijieNetworksCommunity/MT798X-6.6-24.10.git
+  REPO_BRANCH: mt798x-mt799x-mtwifi_be72pro_be68u
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    name: Build firmware
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Maximize build space
+        uses: easimon/maximize-build-space@master
+        with:
+          swap-size-mb: 2048
+          temp-reserve-mb: 200
+          root-reserve-mb: 2048
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
+      - name: Install build dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            ack antlr3 asciidoc autoconf automake autopoint binutils bison build-essential \
+            bzip2 ccache clang cmake cpio curl device-tree-compiler ecj fastjar flex gawk \
+            gettext gcc-multilib g++-multilib git gnutls-dev gperf haveged help2man \
+            intltool lib32gcc-s1 libc6-dev-i386 libelf-dev libglib2.0-dev libgmp3-dev \
+            libltdl-dev libmpc-dev libmpfr-dev libncurses-dev libpython3-dev libreadline-dev \
+            libssl-dev libtool libyaml-dev libz-dev lld llvm lrzsz mkisofs msmtp nano \
+            ninja-build p7zip p7zip-full patch pkgconf python3 python3-pip python3-ply \
+            python3-docutils python3-pyelftools qemu-utils re2c rsync scons squashfs-tools \
+            subversion swig texinfo uglifyjs upx-ucl unzip vim wget xmlto xxd zlib1g-dev zstd
+          sudo timedatectl set-timezone "$TZ"
+          sudo apt-get clean
+
+      - name: Clone source
+        run: |
+          git clone --depth=1 -b "$REPO_BRANCH" "$REPO_URL" openwrt
+          cd openwrt
+          echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
+          INFO=$(git show -s --date=short --format="%an / %cd / %h")
+          echo "SRC_VERSION=$INFO" >> $GITHUB_ENV
+          echo "$INFO"
+
+      - name: Update & install feeds
+        run: |
+          cd "$OPENWRT_PATH"
+          # feeds.conf.default 第 6 行是社区私有源，去掉
+          sed -i '6d' feeds.conf.default || true
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Load config
+        run: |
+          cd "$OPENWRT_PATH"
+          cp "$GITHUB_WORKSPACE/be72pro/firmware/mt798x.config" .config
+          # 只保留目标设备，避免顺带编译 30+ 个板子把磁盘和时间吃光
+          sed -i 's|^CONFIG_TARGET_mediatek_filogic_DEVICE_ruijie_rg-.*=y$|# disabled|' .config
+          echo "CONFIG_TARGET_mediatek_filogic_DEVICE_${{ inputs.device }}=y" >> .config
+          make defconfig
+          echo "=== 已选设备 ==="
+          grep -E '^CONFIG_TARGET_mediatek_filogic_DEVICE_.*=y' .config
+          grep -E '^CONFIG_TARGET_(BOARD|SUBTARGET|PROFILE)=' .config
+
+      - name: Apply diy.sh
+        if: inputs.with_diy == 'true'
+        run: |
+          cd "$OPENWRT_PATH"
+          chmod +x "$GITHUB_WORKSPACE/be72pro/firmware/diy.sh"
+          "$GITHUB_WORKSPACE/be72pro/firmware/diy.sh"
+
+      - name: Download package sources
+        run: |
+          cd "$OPENWRT_PATH"
+          make download -j8 || make download -j1 V=s
+          find dl -size -1024c -exec ls -l {} \; || true
+          find dl -size -1024c -exec rm -f {} \;   || true
+
+      - name: Compile
+        id: compile
+        run: |
+          cd "$OPENWRT_PATH"
+          echo "nproc = $(nproc)"
+          make -j$(nproc) || make -j1 || make -j1 V=s
+          echo "status=success" >> $GITHUB_OUTPUT
+
+      - name: Collect output
+        if: steps.compile.outputs.status == 'success'
+        run: |
+          cd "$OPENWRT_PATH/bin/targets/mediatek/filogic"
+          rm -f *bl2.bin
+          ls -l
+          echo "=== SHA256 ==="
+          sha256sum * 2>/dev/null | tee /tmp/fw-sha256.txt
+          echo "OUT_DIR=$PWD" >> $GITHUB_ENV
+
+      - name: Upload artifact
+        if: steps.compile.outputs.status == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: be72pro-firmware-${{ inputs.device }}
+          path: ${{ env.OUT_DIR }}
+          if-no-files-found: error
+
+      - name: Publish release
+        if: steps.compile.outputs.status == 'success'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: be72pro-fw-${{ github.run_number }}
+          name: BE72 Pro Firmware #${{ github.run_number }} (${{ inputs.device }})
+          prerelease: true
+          files: ${{ env.OUT_DIR }}/*
+          body: |
+            ### Ruijie RG-BE72 Pro ImmortalWrt 固件
+
+            - 设备 profile：`${{ inputs.device }}`
+            - 源码：`MT798X-6.6-24.10` @ `${{ env.REPO_BRANCH }}`
+            - 编译选项：diy.sh = `${{ inputs.with_diy }}`
+            - 上游版本信息：${{ env.SRC_VERSION }}
+
+            刷入方式：U-Boot Web 恢复页 → 刷写固件 → 选本文 sysupgrade.bin
+            分区样式：`fixed-parts` FIP 选 `default`；`multi-layout` FIP 选 `ubi-232.5m`
+            默认后台：`192.168.2.1` / `root` / `password`

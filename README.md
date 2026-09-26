@@ -1,7 +1,18 @@
-# X30E ImmortalWrt 云编译仓库
+# 锐捷路由器云编译仓库
 
-用 GitHub Actions 编译锐捷 RG-X30E 的 ImmortalWrt 固件。
+用 GitHub Actions 编译锐捷路由器的第三方固件 / U-Boot。
 仓库里**只有编译配置**（几 KB），源码由 runner 在境外拉取，绕开本机到 GitHub 的网络问题。
+
+| 机型 | 内容 | 入口 |
+|---|---|---|
+| RG-X30E | ImmortalWrt 固件 | [`build-x30e.yml`](.github/workflows/build-x30e.yml) |
+| **RG-BE72 Pro** | **第三方 U-Boot (FIP) + ImmortalWrt 固件** | [`be72pro/README.md`](be72pro/README.md) |
+
+> 两个 `build-be72pro-*.yml` 的详细说明、源码出处、板级支持核实、刷机流程与风险，全在 **[be72pro/README.md](be72pro/README.md)**。
+
+---
+
+# X30E ImmortalWrt 云编译
 
 ## 关键设定
 

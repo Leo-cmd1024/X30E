@@ -12,8 +12,6 @@ on:
           - ruijie_rg-x30e-firmware2
           - ruijie_rg-x30e
           - ruijie_rg-x30e-stock
-  push:
-    branches: [main]
 
 env:
   REPO_URL: https://github.com/RuijieNetworksCommunity/immortalwrt-mt798x
