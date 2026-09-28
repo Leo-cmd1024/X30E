@@ -1,0 +1,275 @@
+name: Build X30E Firmware (bootstrap + RF stability + OpenVPN)
+
+# 给锐捷 RG-X30E（MT7981 / ImmortalWrt 21.02）云编译一版实用向固件。
+#
+# 相对基线的三处改动：
+#   1) 主题只留 bootstrap —— 去掉 luci-theme-argon / luci-app-argon-config /
+#      luci-theme-bootstrap-mod，并在 uci-defaults 里清掉主题注册表残留项
+#   2) 射频稳定性 —— 新增「允许 DFS 信道」开关（无线射频配置页，默认勾选），
+#      取消勾选后自动信道选择（ACS）跳过 DFS 信道；顺带关闭周期性 ACS 重选与 TWT
+#   3) 新增 OpenVPN —— openvpn-openssl + luci-app-openvpn + 中文翻译 + kmod-tun
+#
+# 源码：RuijieNetworksCommunity/immortalwrt-mt798x @ openwrt-21.02
+# 设备：ruijie_rg-x30e-firmware2（与当前在跑的固件同 profile，sysupgrade -k 可保配置直升）
+#
+# 补丁方式：x30e-v2/files/ 作为 buildroot 的 files/ 覆盖层打进 rootfs，
+# 覆盖包自带文件（OpenWrt 的 files/ 在包安装之后拷贝，优先级更高）。
+# 因此不修改任何 feed 源码，可审计、可回滚。
+
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        description: 'Device profile（必须与设备当前 layout 一致）'
+        required: true
+        default: 'ruijie_rg-x30e-firmware2'
+        type: choice
+        options:
+          - ruijie_rg-x30e-firmware2
+          - ruijie_rg-x30e
+          - ruijie_rg-x30e-stock
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/build-x30e-fw.yml'
+      - 'x30e-v2/**'
+
+concurrency:
+  group: x30e-fw
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+env:
+  REPO_URL: https://github.com/RuijieNetworksCommunity/immortalwrt-mt798x.git
+  REPO_BRANCH: openwrt-21.02
+  BASE_CONFIG: defconfig/mt7981-ax3000.config
+  DEVICE: ${{ github.event.inputs.device || 'ruijie_rg-x30e-firmware2' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 350
+
+    steps:
+      - name: Checkout build recipes
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/lib/jvm /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git \
+            libncurses-dev libssl-dev python3 python3-distutils rsync unzip zlib1g-dev file wget \
+            subversion patch autoconf automake autopoint binutils cpio device-tree-compiler \
+            libelf-dev libglib2.0-dev libgmp-dev libltdl-dev libmpc-dev libmpfr-dev libtool \
+            ninja-build p7zip-full pkgconf python3-pip python3-ply python3-docutils qemu-utils \
+            re2c squashfs-tools swig texinfo uglifyjs xmlto xxd libreadline-dev ccache curl
+          for p in libncurses5-dev libncursesw5-dev genisoimage xorriso haveged intltool lrzsz \
+                   antlr3 asciidoc help2man upx-ucl ecj fastjar lib32gcc-s1 libc6-dev-i386; do
+            sudo apt-get install -y "$p" >/dev/null 2>&1 || echo "skip: $p"
+          done
+
+      - name: Clone source and install feeds
+        run: |
+          git clone --depth=1 "$REPO_URL" -b "$REPO_BRANCH" openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Apply files overlay (patches)
+        run: |
+          cd openwrt
+          test -d "$GITHUB_WORKSPACE/x30e-v2/files" || { echo "::error::x30e-v2/files 不存在"; exit 1; }
+
+          mkdir -p files
+          cp -a "$GITHUB_WORKSPACE/x30e-v2/files/." files/
+          find files -name '*.orig' -delete
+
+          chmod 0755 files/usr/sbin/x30e-wifi-dfs
+          chmod 0755 files/etc/uci-defaults/zz-x30e-theme
+          chmod 0755 files/etc/uci-defaults/zz-x30e-wifi
+          chmod 0755 files/lib/netifd/wireless/mtwifi.sh
+
+          echo "=== files overlay ==="
+          find files -type f | sort
+
+          # --- 补丁自检：三处都必须命中 ---
+          grep -q 'x30e-wifi-dfs' files/lib/netifd/wireless/mtwifi.sh \
+            || { echo "::error::mtwifi.sh 未注入 DFS 钩子"; exit 1; }
+          grep -q 'Allow DFS channels' files/www/luci-static/resources/view/network/wireless.js \
+            || { echo "::error::wireless.js 未注入 DFS 开关"; exit 1; }
+          grep -q 'AutoChannelSkipList' files/usr/sbin/x30e-wifi-dfs \
+            || { echo "::error::x30e-wifi-dfs 逻辑缺失"; exit 1; }
+
+          # --- 语法自检 ---
+          sh -n files/lib/netifd/wireless/mtwifi.sh
+          sh -n files/usr/sbin/x30e-wifi-dfs
+          sh -n files/etc/uci-defaults/zz-x30e-theme
+          sh -n files/etc/uci-defaults/zz-x30e-wifi
+          node --check files/www/luci-static/resources/view/network/wireless.js \
+            && echo "OK: wireless.js 语法通过"
+
+      - name: Build config
+        run: |
+          cd openwrt
+          cp "$BASE_CONFIG" .config
+
+          # 只留目标设备，关掉板级配置里其余 30+ 个 mt7981 设备
+          sed -i 's|^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_.*=y$|# disabled|' .config
+
+          # 先摘掉基线里的主题选择，再用追加行覆盖（kconfig 后出现的赋值生效）
+          sed -i '/^CONFIG_PACKAGE_luci-theme-argon=/d'           .config
+          sed -i '/^CONFIG_PACKAGE_luci-app-argon-config=/d'      .config
+          sed -i '/^CONFIG_PACKAGE_luci-i18n-argon-config/d'      .config
+          sed -i '/^CONFIG_PACKAGE_luci-theme-bootstrap-mod=/d'   .config
+
+          {
+            echo "CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_${DEVICE}=y"
+            echo "CONFIG_TARGET_DEVICE_PACKAGES_mediatek_mt7981_DEVICE_${DEVICE}=\"\""
+
+            # 1) 主题：只要 bootstrap
+            echo "CONFIG_PACKAGE_luci-theme-bootstrap=y"
+            echo "# CONFIG_PACKAGE_luci-theme-argon is not set"
+            echo "# CONFIG_PACKAGE_luci-app-argon-config is not set"
+            echo "# CONFIG_PACKAGE_luci-i18n-argon-config-zh-cn is not set"
+            echo "# CONFIG_PACKAGE_luci-theme-bootstrap-mod is not set"
+
+            # 3) OpenVPN
+            echo "CONFIG_PACKAGE_openvpn-openssl=y"
+            echo "CONFIG_PACKAGE_luci-app-openvpn=y"
+            echo "CONFIG_PACKAGE_luci-i18n-openvpn-zh-cn=y"
+            echo "CONFIG_PACKAGE_kmod-tun=y"
+          } >> .config
+
+          make defconfig
+
+          echo "=== 设备 ==="
+          grep -E '^CONFIG_TARGET_DEVICE_mediatek_mt7981_DEVICE_.*=y' .config || true
+          echo "=== 主题与 OpenVPN ==="
+          grep -E '^CONFIG_PACKAGE_(luci-theme-[a-z-]+|luci-app-argon-config|openvpn[a-z-]*|luci-app-openvpn|luci-i18n-openvpn[a-z-]*|kmod-tun)=' .config || true
+          echo "=== 被显式关闭的 ==="
+          grep -E '^# CONFIG_PACKAGE_(luci-theme-argon|luci-theme-bootstrap-mod|luci-app-argon-config)' .config || true
+
+          grep -q '^CONFIG_PACKAGE_luci-theme-bootstrap=y' .config \
+            || { echo "::error::luci-theme-bootstrap 没进 config"; exit 1; }
+          grep -q '^CONFIG_PACKAGE_openvpn-openssl=y' .config \
+            || { echo "::error::openvpn-openssl 没进 config"; exit 1; }
+          grep -q '^CONFIG_PACKAGE_luci-app-openvpn=y' .config \
+            || { echo "::error::luci-app-openvpn 没进 config"; exit 1; }
+          if grep -q '^CONFIG_PACKAGE_luci-theme-argon=y' .config; then
+            echo "::error::luci-theme-argon 竟然还是 y"; exit 1
+          fi
+
+      - name: Download package sources
+        run: |
+          cd openwrt
+          make download -j8 || make download -j1 V=s
+
+      - name: Build firmware
+        run: |
+          cd openwrt
+          echo "Building with $(nproc) threads"
+          make -j$(nproc) || make -j1 V=s
+
+      - name: Verify inside built rootfs
+        run: |
+          cd openwrt
+          ROOT=$(find build_dir -maxdepth 2 -type d -name 'root-mediatek*' | head -1)
+          echo "staged rootfs: ${ROOT:-<not found>}"
+          fail=0
+          chk() {
+            if eval "$2"; then echo "  OK   $1"; else echo "  FAIL $1"; fail=1; fi
+          }
+
+          if [ -n "$ROOT" ]; then
+            # 主题：argon 必须彻底不在
+            chk "argon 主题目录已移除"      "[ ! -d '$ROOT/www/luci-static/argon' ]"
+            chk "bootstrap 主题在位"        "[ -f '$ROOT/www/luci-static/bootstrap/cascade.css' ]"
+            chk "argon 包未安装"            "! grep -q '^Package: luci-theme-argon$' '$ROOT/usr/lib/opkg/status'"
+
+            # DFS 功能
+            chk "DFS 开关已进前端"          "grep -q 'Allow DFS channels' '$ROOT/www/luci-static/resources/view/network/wireless.js'"
+            chk "DFS 钩子已进 netifd"       "grep -q 'x30e-wifi-dfs' '$ROOT/lib/netifd/wireless/mtwifi.sh'"
+            chk "DFS 策略脚本可执行"        "[ -x '$ROOT/usr/sbin/x30e-wifi-dfs' ]"
+            chk "uci-defaults 主题脚本"     "[ -x '$ROOT/etc/uci-defaults/zz-x30e-theme' ]"
+            chk "uci-defaults 射频脚本"     "[ -x '$ROOT/etc/uci-defaults/zz-x30e-wifi' ]"
+
+            # OpenVPN
+            chk "openvpn 二进制"            "[ -x '$ROOT/usr/sbin/openvpn' ]"
+            chk "luci-app-openvpn 已装"     "grep -q '^Package: luci-app-openvpn$' '$ROOT/usr/lib/opkg/status'"
+            chk "kmod-tun 已装"             "grep -q '^Package: kmod-tun$' '$ROOT/usr/lib/opkg/status'"
+          else
+            echo "::warning::找不到 staging rootfs，跳过深度校验"
+          fi
+
+          echo "=== 产物 ==="
+          ls -lh bin/targets/mediatek/mt7981/ | head -30
+          [ "$fail" = "0" ] || { echo "::error::rootfs 校验未全部通过"; exit 1; }
+
+      - name: Collect images
+        run: |
+          cd openwrt
+          mkdir -p /tmp/dist
+          find bin/targets/mediatek/mt7981 -maxdepth 1 -type f \
+            \( -name "*ruijie_rg-x30e*squashfs-sysupgrade*" -o -name "profiles.json" \) \
+            -exec cp -v {} /tmp/dist/ \;
+          cd /tmp/dist
+          ls -lh
+          sha256sum * > sha256sums.txt
+          cat sha256sums.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: x30e-fw-immortalwrt
+          path: /tmp/dist/
+          if-no-files-found: error
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: x30e-fw-${{ github.run_number }}
+          name: X30E Firmware (bootstrap + RF + OpenVPN) #${{ github.run_number }}
+          prerelease: true
+          files: /tmp/dist/*
+          body: |
+            ### 锐捷 RG-X30E · ImmortalWrt 21.02 实用向固件
+
+            源码：`RuijieNetworksCommunity/immortalwrt-mt798x` @ `openwrt-21.02`
+            设备：`ruijie_rg-x30e-firmware2`（与在跑固件同 profile，可保配置升级）
+
+            #### 1. 主题只留 bootstrap
+            移除 `luci-theme-argon` / `luci-app-argon-config` /
+            `luci-i18n-argon-config-zh-cn` / `luci-theme-bootstrap-mod`；
+            `zz-x30e-theme` 会清掉主题注册表残留项并锁定 bootstrap。
+
+            #### 2. 射频稳定性：可配置的 DFS 策略
+            无线射频配置页（General Setup）新增 **「Allow DFS channels」** 复选框：
+
+            - **勾选（默认）**：允许自动信道选择（ACS）使用 DFS 信道
+            - **取消勾选**：ACS 跳过 DFS 信道（中国 5G 为 `52;56;60;64`）
+
+            后端不做任何硬编码信道：由 `x30e-wifi-dfs` 把跳频表写进 MTK 驱动 profile
+            的 `AutoChannelSkipList`（分号分隔的十进制信道号，驱动 `cmm_profile.c` 原
+            生解析），再由驱动自己的 ACS 算法挑信道。带宽/信道模式不受影响。
+            同时关闭 **周期性 ACS 重选**（`ACSCheckTime=0`）与 **TWT**。
+
+            #### 3. OpenVPN
+            新增 `openvpn-openssl` + `luci-app-openvpn` + 中文界面 + `kmod-tun`。
+            注意：本机 WAN 为运营商 CGNAT（无公网 IP），做服务端需先解决入站可达，
+            客户端拨出可直接用。
+
+            #### 升级方式（保留配置）
+
+            ```
+            sysupgrade -k /tmp/<本文件>.bin
+            ```
+            或在 LuCI：系统 → 备份/刷写固件 → 勾选「保留配置」→ 上传。

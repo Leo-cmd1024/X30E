@@ -1,0 +1,91 @@
+#!/bin/sh
+#
+# x30e-wifi-dfs —— 锐捷 RG-X30E / MT7981 (MTK mtwifi) 自动信道 ACS 的 DFS 策略
+#
+# 由 /lib/netifd/wireless/mtwifi.sh 的 drv_mtwifi_setup() 在
+# 「json_dump | mtwifi_cfg setup」之前调用。
+#
+#   uci wireless.<dev>.dfs = 1 (默认)  允许 ACS 使用 DFS 信道
+#   uci wireless.<dev>.dfs = 0         ACS 跳过 DFS 信道
+#
+# 原理
+# ----
+# MTK 驱动的 cmm_profile.c 这样解析 profile 里的 AutoChannelSkipList：
+#     AutoChannelSkipListNum = delimitcnt(tmpbuf, ";") + 1;
+#     for (i = 0, macptr = rstrtok(tmpbuf, ";"); macptr; macptr = rstrtok(NULL, ";"), i++)
+#         pAd->ApCfg.AutoChannelSkipList[i] = os_str_tol(macptr, 0, 10);
+# 即：**分号分隔的十进制信道号**，上限 10 条。
+# 运行期由 AutoChannelSkipListCheck() 在 ACS 选信道时逐个比对跳过。
+# 参考：MediaTek "Auto-Channel Selection Application Note"（MT7986_ACS.pdf）
+#       /etc/wireless/mediatek/mt7915.dbdc.b0.dat = BAND0，b1.dat = BAND1
+#       profile 里 AutoChannelSelect=3 + Channel=0 即触发启动时 ACS。
+#
+# 关于信道号
+# ----------
+# 中国 5G 合法信道：36 40 44 48 52 56 60 64 149 153 157 161 165
+# 其中 DFS 只有 52 56 60 64（100-144 段国内未开放）。
+# 所以 4 条足够，远低于驱动 10 条上限。
+#
+# 本脚本只改 5G 频段的 profile；2.4G 无 DFS，直接跳过。
+
+set -u
+
+dev="${1:-}"
+[ -n "$dev" ] || exit 0
+
+# 只处理 MTK mtwifi 设备
+[ "$(uci -q get wireless.$dev.type)" = "mtwifi" ] || exit 0
+
+band="$(uci -q get wireless.$dev.band)"
+phy="$(uci -q get wireless.$dev.phy)"
+[ "$band" = "5g" ] || exit 0
+[ -n "$phy" ] || exit 0
+
+# --- 读取开关，缺省视为「允许 DFS」 ----------------------------------------
+dfs="$(uci -q get wireless.$dev.dfs)"
+case "$dfs" in
+	""|1|on|true|yes|enabled) dfs=1 ;;
+	*)                        dfs=0 ;;
+esac
+
+# --- 从 l1profile.dat 按 main_ifname 顺序定位本射频的 profile 文件 ----------
+# 形如：
+#   INDEX0_profile_path=/etc/wireless/mediatek/mt7981.dbdc.b0.dat;/etc/wireless/mediatek/mt7981.dbdc.b1.dat
+#   INDEX0_main_ifname=ra0;rax0
+# 两行的分号列表一一对应（ra0->b0.dat，rax0->b1.dat）。
+target="$(awk -v phy="$phy" '
+	/^INDEX[0-9]+_profile_path=/ {
+		sub(/^[^=]*=/, ""); np = split($0, P, ";"); next
+	}
+	/^INDEX[0-9]+_main_ifname=/ {
+		sub(/^[^=]*=/, ""); ni = split($0, N, ";")
+		for (i = 1; i <= ni; i++)
+			if (N[i] == phy && i <= np) { print P[i]; exit }
+	}
+' /etc/wireless/l1profile.dat 2>/dev/null)"
+
+if [ -z "$target" ] || [ ! -f "$target" ]; then
+	logger -t x30e-wifi-dfs "dev=$dev phy=$phy: profile not resolved, skip"
+	exit 0
+fi
+
+# --- 计算跳频表 -------------------------------------------------------------
+if [ "$dfs" = "1" ]; then
+	skip=""
+else
+	skip="52;56;60;64"
+fi
+
+# --- 写回 profile（幂等） ---------------------------------------------------
+# AutoChannelSkipList：ACS 跳过列表
+sed -i "s|^AutoChannelSkipList=.*|AutoChannelSkipList=$skip|" "$target"
+
+# ACSCheckTime=0：关闭「周期性自动信道重选」。
+# 非 0 时驱动会每 N 小时重跑一次 ACS，一旦换信道全部客户端瞬断，
+# 这是家庭场景里最常见的「WiFi 莫名断一下」来源。只在启动时选一次更稳。
+if grep -q '^ACSCheckTime=' "$target"; then
+	sed -i 's|^ACSCheckTime=.*|ACSCheckTime=0|' "$target"
+fi
+
+logger -t x30e-wifi-dfs "dev=$dev phy=$phy dfs=$dfs skip='$skip' profile=$target"
+exit 0

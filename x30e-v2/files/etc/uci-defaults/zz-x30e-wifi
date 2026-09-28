@@ -1,0 +1,27 @@
+#!/bin/sh
+#
+# zz-x30e-wifi —— MT7981 射频稳定性默认值 + DFS 策略开关
+#
+# zz- 前缀 = 在 /etc/uci-defaults 字母序里最后执行，不被其他包覆盖。
+# 每次 sysupgrade（含 -k 保配置）后都会重跑一次，所以这里只做「缺省才写」，
+# 不覆盖用户已经调过的值。
+
+# ---------------------------------------------------------------- 遍历射频 --
+for dev in $(uci -q show wireless 2>/dev/null | \
+		sed -n 's/^wireless\.\([A-Za-z0-9_]*\)=wifi-device$/\1/p'); do
+
+	# DFS 开关：默认勾选（= 1），允许自动信道选择使用 DFS 信道
+	[ -n "$(uci -q get wireless.$dev.dfs)" ] || uci -q set wireless.$dev.dfs=1
+
+	# 关闭 TWT（Target Wake Time）。
+	# TWT 是 802.11ax 的省电特性，但不少手机/IoT 设备在 TWT 协商上有 bug，
+	# 表现为间歇性卡顿、掉线或时延抖动。家庭环境关闭更稳。
+	[ -n "$(uci -q get wireless.$dev.twt)" ] || uci -q set wireless.$dev.twt=0
+
+	# 串行化 VAP 上报，避免多 SSID 同时起停时驱动竞态
+	[ -n "$(uci -q get wireless.$dev.serialize)" ] || uci -q set wireless.$dev.serialize=1
+done
+
+uci -q commit wireless
+
+exit 0

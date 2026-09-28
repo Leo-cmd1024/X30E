@@ -1,0 +1,23 @@
+#!/bin/sh
+#
+# zz-x30e-theme —— 只保留 bootstrap 主题
+#
+# 命名用 zz- 前缀是为了在 /etc/uci-defaults 的字母序里**最后**执行，
+# 保证不被 30_luci-theme-* / luci-argon-config / 99-default-settings* 覆盖。
+#
+# 本固件不再打包 luci-theme-argon / luci-app-argon-config /
+# luci-theme-bootstrap-mod，这里顺手把主题注册表里可能残留的条目清掉，
+# 这样 LuCI 的「系统 -> 系统 -> 语言和界面」下拉框里只会剩 Bootstrap。
+
+# 清掉非 bootstrap 的主题注册项
+for t in Argon BootstrapDark BootstrapLight Bootstrap_Mod; do
+	uci -q delete "luci.themes.$t"
+done
+
+# 只保留 bootstrap，并强制当前主题为它
+uci -q set luci.themes.Bootstrap='/luci-static/bootstrap'
+uci -q set luci.main.mediaurlbase='/luci-static/bootstrap'
+
+uci -q commit luci
+
+exit 0
