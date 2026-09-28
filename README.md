@@ -6,6 +6,7 @@
 | 机型 | 内容 | 入口 |
 |---|---|---|
 | RG-X30E | ImmortalWrt 固件 | [`build-x30e.yml`](.github/workflows/build-x30e.yml) |
+| **RG-X30E** | **苹果风格 UI 固件（可保留配置升级）** | [`x30e-apple/README.md`](x30e-apple/README.md) |
 | **RG-BE72 Pro** | **第三方 U-Boot (FIP) + ImmortalWrt 固件** | [`be72pro/README.md`](be72pro/README.md) |
 
 > 两个 `build-be72pro-*.yml` 的详细说明、源码出处、板级支持核实、刷机流程与风险，全在 **[be72pro/README.md](be72pro/README.md)**。

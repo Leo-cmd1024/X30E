@@ -1,0 +1,605 @@
+/*! x30e-apple-ui v1  |  Apple HIG skin for luci-theme-argon 2.3.1
+ * ---------------------------------------------------------------------------
+ * Append-only override layer. It is concatenated to the END of argon's
+ * cascade.css at build time, so it wins on source order without touching a
+ * single template file.
+ *
+ * Design rules kept deliberately narrow to stay safe:
+ *   changed : color / background / border / border-radius / shadow /
+ *             typography / alignment / focus ring
+ *   untouched: display / position / float / width / height / grid
+ *
+ * Escape hatch (if anything ever looks wrong):
+ *   uci set luci.main.mediaurlbase='/luci-static/bootstrap'
+ *   uci commit luci && /etc/init.d/uhttpd restart
+ * ------------------------------------------------------------------------- */
+
+/* ======================= 1. design tokens ======================= */
+:root{
+  /* Apple system colors (light) */
+  --ap-blue:#007AFF;
+  --ap-blue-soft:rgba(0,122,255,.13);
+  --ap-green:#34C759;
+  --ap-red:#FF3B30;
+  --ap-orange:#FF9500;
+  --ap-yellow:#FFCC00;
+  --ap-purple:#AF52DE;
+  --ap-teal:#5AC8FA;
+
+  --ap-bg:#F2F2F7;               /* systemGroupedBackground */
+  --ap-surface:#FFFFFF;          /* secondarySystemGroupedBackground */
+  --ap-sunken:#F2F2F7;
+  --ap-fill:rgba(120,120,128,.12);
+  --ap-fill-strong:rgba(120,120,128,.20);
+
+  --ap-label:#1C1C1E;
+  --ap-label-2:rgba(60,60,67,.60);   /* secondaryLabel */
+  --ap-label-3:rgba(60,60,67,.32);   /* tertiaryLabel  */
+  --ap-sep:rgba(60,60,67,.13);       /* separator     */
+
+  --ap-radius-card:16px;
+  --ap-radius-ctl:10px;
+  --ap-radius-sm:8px;
+
+  --ap-shadow-card:0 1px 2px rgba(16,24,40,.04),0 12px 28px -14px rgba(16,24,40,.18);
+  --ap-shadow-pop:0 12px 40px -8px rgba(16,24,40,.22),0 2px 8px rgba(16,24,40,.06);
+  --ap-focus-ring:0 0 0 4px rgba(0,122,255,.16);
+
+  /* SF Pro on Apple clients, PingFang on Chinese, sane fallbacks elsewhere */
+  --ap-font:-apple-system,BlinkMacSystemFont,"SF Pro Text","SF Pro Display","Helvetica Neue",
+            "PingFang SC","Hiragino Sans GB","Microsoft YaHei UI","Microsoft YaHei",
+            "Noto Sans CJK SC","Source Han Sans SC",sans-serif;
+  --ap-mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Monaco,"Cascadia Mono",Consolas,monospace;
+
+  /* ---- re-map argon tokens ---- */
+  --font-family-normal:var(--ap-font) !important;
+  --font-family-sans-serif:var(--ap-font) !important;
+  --font-family-monospace:var(--ap-mono) !important;
+
+  --background-color:var(--ap-bg) !important;
+  --menu-bg-color:rgba(255,255,255,.72) !important;
+  --header-bg:rgba(255,255,255,.72) !important;
+  --main-color:var(--ap-blue) !important;
+
+  --white:#FFFFFF !important;
+  --black:#000000 !important;
+  --blue:var(--ap-blue) !important;
+  --indigo:#5856D6 !important;
+  --purple:var(--ap-purple) !important;
+  --pink:#FF2D55 !important;
+  --red:var(--ap-red) !important;
+  --orange:var(--ap-orange) !important;
+  --yellow:var(--ap-yellow) !important;
+  --green:var(--ap-green) !important;
+  --teal:var(--ap-teal) !important;
+  --cyan:#32ADE6 !important;
+  --gray:#8E8E93 !important;
+  --gray-dark:#636366 !important;
+  --light:#F2F2F7 !important;
+  --lighter:#FFFFFF !important;
+  --dark:#1C1C1E !important;
+  --darker:#000000 !important;
+  --neutral:#8E8E93 !important;
+  --default:#8E8E93 !important;
+}
+
+/* ======================= 2. base / typography ======================= */
+html{
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-size-adjust:100%;
+}
+body{
+  background-color:var(--ap-bg) !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-size:15px;
+  line-height:1.55;
+  letter-spacing:-.004em;
+}
+h1,h2,h3,h4,h5,h6,legend{
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-weight:600 !important;
+  letter-spacing:-.012em !important;
+}
+h1{font-size:26px !important} h2{font-size:22px !important} h3{font-size:17px !important}
+h4{font-size:16px !important} h5{font-size:15px !important}
+a{color:var(--ap-blue) !important;text-decoration:none}
+a:hover{text-decoration:none;opacity:.82}
+code,pre,kbd,samp{font-family:var(--ap-mono) !important}
+pre{
+  background:var(--ap-fill) !important;border:0 !important;
+  border-radius:var(--ap-radius-ctl) !important;color:var(--ap-label) !important;
+}
+hr{border:0;border-top:1px solid var(--ap-sep)}
+::selection{background:var(--ap-blue-soft)}
+
+/* thin macOS-style scrollbars */
+*{scrollbar-width:thin;scrollbar-color:rgba(120,120,128,.45) transparent}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{
+  background:rgba(120,120,128,.38);border:2px solid transparent;
+  border-radius:8px;background-clip:content-box;
+}
+::-webkit-scrollbar-thumb:hover{background:rgba(120,120,128,.60);background-clip:content-box}
+
+:focus-visible{outline:none !important;box-shadow:var(--ap-focus-ring) !important}
+
+/* ======================= 3. top bar : frosted glass ======================= */
+header,
+header.bg-primary{
+  background-color:rgba(255,255,255,.72) !important;
+  -webkit-backdrop-filter:saturate(180%) blur(20px) !important;
+  backdrop-filter:saturate(180%) blur(20px) !important;
+  border-bottom:1px solid var(--ap-sep) !important;
+  box-shadow:none !important;
+  color:var(--ap-label) !important;
+}
+header .fill{background:transparent !important;background-image:none !important;box-shadow:none !important}
+header .container{background:transparent !important}
+header .brand,
+header .flex1 .brand,
+header a.brand{
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-weight:600 !important;
+  font-size:17px !important;
+  letter-spacing:-.012em !important;
+  text-shadow:none !important;
+}
+header .status,header .status *{color:var(--ap-label-2) !important;text-shadow:none !important}
+header a.showSide,header a.showSide::before,header a.showSide::after{
+  color:var(--ap-label) !important;background-color:var(--ap-label) !important;
+}
+header #indicators .label,header #indicators .value{color:var(--ap-label) !important}
+
+/* ======================= 4. sidebar : macOS source list ======================= */
+.main-left{
+  background-color:rgba(255,255,255,.72) !important;
+  -webkit-backdrop-filter:saturate(180%) blur(20px) !important;
+  backdrop-filter:saturate(180%) blur(20px) !important;
+  border-right:1px solid var(--ap-sep) !important;
+  box-shadow:none !important;
+}
+.main-left .sidenav-header{border-bottom:1px solid var(--ap-sep)}
+.main-left .sidenav-header .brand{
+  font-family:var(--ap-font) !important;
+  font-size:20px !important;
+  font-weight:600 !important;
+  letter-spacing:-.018em !important;
+  color:var(--ap-label) !important;
+}
+.main-left .sidenav-toggler-inner .sidenav-toggler-line{background:var(--ap-label-2) !important}
+
+.main-left .nav li a,
+.main-left ul.nav > li > a,
+.main-left .nav .a{
+  background-color:transparent !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-size:14px !important;
+  font-weight:500 !important;
+  border-radius:var(--ap-radius-sm) !important;
+  transition:background-color .16s ease,color .16s ease;
+}
+.main-left .nav li a:hover,
+.main-left ul.nav > li > a:hover{background-color:rgba(120,120,128,.10) !important}
+.main-left .nav li.active > a,
+.main-left .nav li > a.active,
+.main-left .nav a.active{
+  background-color:var(--ap-blue-soft) !important;
+  color:var(--ap-blue) !important;
+  font-weight:600 !important;
+}
+.main-left .nav .slide > ul > li > a{font-weight:400 !important;color:var(--ap-label-2) !important}
+.main-left .nav .slide > ul > li.active > a{color:var(--ap-blue) !important;font-weight:600 !important}
+.main-left .nav .a .badge,.main-left .nav .badge{
+  background-color:var(--ap-fill) !important;color:var(--ap-label-2) !important;border-radius:10px !important;
+}
+.main-left::-webkit-scrollbar-track{background-color:transparent !important}
+.main-left::-webkit-scrollbar-thumb{background-color:rgba(120,120,128,.38) !important}
+.main-left .darkMask{background:rgba(0,0,0,.28) !important}
+
+/* ======================= 5. content shell & cards ======================= */
+#maincontent{background-color:transparent !important}
+#maincontent > .container{max-width:1200px;margin-left:auto;margin-right:auto}
+
+.cbi-map,.cbi-section,.cbi-tblsection,.panel,.cbi-section-table,
+.network-status-table .ifacebox,.cbi-modal .cbi-section{
+  background-color:var(--ap-surface) !important;
+  border:1px solid var(--ap-sep) !important;
+  border-radius:var(--ap-radius-card) !important;
+  box-shadow:var(--ap-shadow-card) !important;
+}
+.cbi-section .cbi-section,
+.cbi-modal .cbi-section,
+.cbi-section .cbi-section-node{box-shadow:none !important;border:0 !important;background-color:transparent !important;border-radius:0 !important}
+.cbi-map:not(:first-child){margin-top:1.25rem}
+.cbi-map > h2,.cbi-section > h3,.cbi-section > legend,.cbi-map > h3{
+  background:transparent !important;
+  border-bottom:0 !important;
+  color:var(--ap-label) !important;
+  font-size:17px !important;
+  font-weight:600 !important;
+  letter-spacing:-.012em !important;
+}
+.cbi-map-descr,.cbi-section-descr,.cbi-value-description,.cbi-tab-descr{
+  color:var(--ap-label-2) !important;
+  font-size:13px !important;
+  line-height:1.5 !important;
+  opacity:1 !important;
+}
+.cbi-section-actions .cbi-button{margin-top:0}
+
+/* ======================= 6. tables : iOS inset list ======================= */
+.table{
+  background-color:transparent !important;
+  border:0 !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+.table .tr{
+  background-color:transparent !important;
+  border-bottom:1px solid var(--ap-sep) !important;
+  transition:background-color .15s ease;
+}
+.table .tr:last-child{border-bottom:0 !important}
+.table .tr:hover{background-color:rgba(0,122,255,.045) !important}
+.table .cbi-rowstyle-1,.table .cbi-rowstyle-2{background-color:transparent !important}
+.table .th,
+.table .tr.table-titles,
+.table .tr.table-titles .th{
+  background-color:transparent !important;
+  border-bottom:1px solid var(--ap-sep) !important;
+  color:var(--ap-label-2) !important;
+  font-size:12px !important;
+  font-weight:600 !important;
+  letter-spacing:.03em !important;
+  text-transform:uppercase;
+  text-align:left !important;
+}
+.table .td,.table .th{color:var(--ap-label) !important;padding-top:.6rem !important;padding-bottom:.6rem !important}
+.table .td.cbi-section-table-cell{color:var(--ap-label) !important}
+.tr.table-titles .th:first-child,.table .tr .td:first-child{padding-left:1rem !important}
+.tr.table-titles .th:last-child,.table .tr .td:last-child{padding-right:1rem !important}
+
+/* ======================= 7. form rows ======================= */
+.cbi-value{
+  background-color:transparent !important;
+  border-bottom:1px solid var(--ap-sep) !important;
+  line-height:2.1rem !important;
+}
+.cbi-value:last-child{border-bottom:0 !important}
+.cbi-value-title{
+  color:var(--ap-label) !important;
+  font-size:14px !important;
+  font-weight:500 !important;
+  text-align:left !important;           /* Apple aligns labels left */
+  letter-spacing:-.004em;
+}
+.cbi-value-field{color:var(--ap-label) !important}
+.cbi-value-field label{font-size:14px !important;color:var(--ap-label) !important}
+.cbi-value-description,.cbi-value-field .cbi-value-description{color:var(--ap-label-3) !important}
+.cbi-value-field .cbi-input-text,.cbi-value-field .cbi-input-password{min-width:18rem}
+
+/* ======================= 8. inputs / selects / textarea ======================= */
+input[type="text"],input[type="password"],input[type="number"],input[type="search"],
+input[type="email"],input[type="url"],input[type="tel"],input[type="date"],
+input[type="time"],input[type="datetime-local"],textarea,
+.cbi-input-text,.cbi-input-password,.cbi-input-textarea,.cbi-input-file{
+  background-color:var(--ap-fill) !important;
+  background-image:none !important;
+  border:1px solid transparent !important;
+  border-radius:var(--ap-radius-ctl) !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-size:15px !important;
+  line-height:1.4 !important;
+  padding:.5rem .75rem !important;
+  box-shadow:none !important;
+  outline:0 !important;
+  transition:background-color .18s ease,border-color .18s ease,box-shadow .18s ease;
+}
+input[type="text"]::placeholder,input[type="password"]::placeholder,
+input[type="number"]::placeholder,textarea::placeholder{color:var(--ap-label-3) !important}
+input[type="text"]:hover,input[type="password"]:hover,input[type="number"]:hover,
+input[type="search"]:hover,textarea:hover,.cbi-input-text:hover{background-color:var(--ap-fill-strong) !important}
+
+input[type="text"]:focus,input[type="password"]:focus,input[type="number"]:focus,
+input[type="search"]:focus,input[type="email"]:focus,input[type="url"]:focus,
+input[type="tel"]:focus,input[type="date"]:focus,input[type="time"]:focus,
+textarea:focus,.cbi-input-text:focus,.cbi-input-password:focus,.cbi-input-textarea:focus,
+.cbi-dropdown:focus{
+  background-color:var(--ap-surface) !important;
+  border-color:var(--ap-blue) !important;
+  box-shadow:var(--ap-focus-ring) !important;
+  outline:0 !important;
+}
+input[disabled],input[readonly],textarea[disabled],select[disabled]{
+  opacity:.55 !important;background-color:var(--ap-fill) !important;cursor:not-allowed;
+}
+.cbi-input-invalid,.cbi-input-invalid:focus{
+  border-color:var(--ap-red) !important;
+  background-color:rgba(255,59,48,.07) !important;
+  box-shadow:0 0 0 4px rgba(255,59,48,.14) !important;
+}
+.cbi-section-error,.cbi-error{color:var(--ap-red) !important}
+
+/* native select with an SF-style chevron */
+select,.cbi-input-select,.cbi-value-field select{
+  -webkit-appearance:none !important;
+  -moz-appearance:none !important;
+  appearance:none !important;
+  background-color:var(--ap-fill) !important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1.2 1.6L6 6.4l4.8-4.8' fill='none' stroke='%238E8E93' stroke-width='1.9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat:no-repeat !important;
+  background-position:right .7rem center !important;
+  background-size:12px 8px !important;
+  border:1px solid transparent !important;
+  border-radius:var(--ap-radius-ctl) !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-size:15px !important;
+  padding:.5rem 2.1rem .5rem .75rem !important;
+  box-shadow:none !important;
+  outline:0 !important;
+}
+select:focus,.cbi-input-select:focus{
+  background-color:var(--ap-surface) !important;
+  border-color:var(--ap-blue) !important;
+  box-shadow:var(--ap-focus-ring) !important;
+}
+.cbi-dropdown{
+  background-color:var(--ap-fill) !important;
+  background-image:none !important;
+  border:1px solid transparent !important;
+  border-radius:var(--ap-radius-ctl) !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  box-shadow:none !important;
+}
+.cbi-dropdown[open],.cbi-dropdown.open{
+  background-color:var(--ap-surface) !important;
+  border-color:var(--ap-blue) !important;
+  box-shadow:var(--ap-focus-ring) !important;
+}
+.cbi-dropdown ul.dropdown,.cbi-dropdown > ul{
+  background-color:var(--ap-surface) !important;
+  border:1px solid var(--ap-sep) !important;
+  border-radius:12px !important;
+  box-shadow:var(--ap-shadow-pop) !important;
+  overflow:hidden;
+}
+.cbi-dropdown ul.dropdown li,.cbi-dropdown > ul li{
+  color:var(--ap-label) !important;font-size:14px !important;
+}
+.cbi-dropdown ul.dropdown li:hover,.cbi-dropdown > ul li:hover,
+.cbi-dropdown ul.dropdown li[selected],.cbi-dropdown > ul li[selected]{
+  background-color:var(--ap-blue-soft) !important;color:var(--ap-blue) !important;
+}
+.cbi-dynlist > .item,.cbi-dynlist .item{
+  border:1px solid var(--ap-sep) !important;
+  border-radius:var(--ap-radius-sm) !important;
+  background-color:var(--ap-surface) !important;
+}
+
+/* ======================= 9. checkboxes & radios ======================= */
+input[type="checkbox"],input[type="radio"],.cbi-input-checkbox,.cbi-input-radio{
+  accent-color:var(--ap-blue) !important;
+}
+input[type="checkbox"]{border-radius:6px !important}
+input[type="checkbox"]:focus,input[type="radio"]:focus{
+  outline:0 !important;box-shadow:var(--ap-focus-ring) !important;
+}
+.cbi-checkbox{display:inline-flex;align-items:center;gap:.45rem;font-size:14px}
+.pure-checkbox,.pure-radio{font-size:14px !important}
+
+/* ======================= 10. buttons ======================= */
+.btn,.cbi-button,button,input[type="button"],input[type="submit"],input[type="reset"]{
+  font-family:var(--ap-font) !important;
+  font-size:14px !important;
+  font-weight:500 !important;
+  letter-spacing:-.004em !important;
+  border:0 !important;
+  border-radius:var(--ap-radius-ctl) !important;
+  background-color:var(--ap-fill) !important;
+  background-image:none !important;
+  color:var(--ap-blue) !important;
+  padding:.5rem .95rem !important;
+  box-shadow:none !important;
+  text-shadow:none !important;
+  transition:filter .16s ease,background-color .16s ease,transform .06s ease;
+}
+.btn:hover,.cbi-button:hover,button:hover{
+  filter:brightness(.965);
+}
+.btn:active,.cbi-button:active{transform:scale(.985)}
+
+/* filled = commit actions */
+.cbi-button-apply,.cbi-button-save,.cbi-button-positive,.cbi-button-action,
+.cbi-button-add,.cbi-button-download,.cbi-button-download-command,
+.cbi-button-upload,.cbi-button-success,.cbi-button-reload,.cbi-button-up{
+  background-color:var(--ap-blue) !important;
+  color:#fff !important;
+}
+/* destructive / reset */
+.cbi-button-reset,.cbi-button-negative,.cbi-button-remove,.cbi-button-down{
+  background-color:rgba(255,59,48,.12) !important;
+  color:var(--ap-red) !important;
+}
+/* quiet / neutral */
+.cbi-button-neutral,.cbi-button-link,.cbi-button-edit,.cbi-button-find,
+.cbi-button-clear{
+  background-color:var(--ap-fill) !important;
+  color:var(--ap-blue) !important;
+}
+.cbi-button[disabled],.btn[disabled],button[disabled]{
+  opacity:.45 !important;cursor:not-allowed !important;filter:none !important;
+}
+
+/* sticky action bar -> frosted toolbar */
+.cbi-page-actions{
+  background-color:rgba(242,242,247,.82) !important;
+  -webkit-backdrop-filter:saturate(180%) blur(18px) !important;
+  backdrop-filter:saturate(180%) blur(18px) !important;
+  border-top:1px solid var(--ap-sep) !important;
+  border-radius:0 !important;
+  box-shadow:none !important;
+}
+
+/* ======================= 11. tabs : iOS segmented control ======================= */
+.cbi-tabmenu,.tabs,.cbi-tabmenu > ul,.tabs > ul{
+  background-color:var(--ap-fill) !important;
+  border:0 !important;
+  border-bottom:0 !important;
+  border-radius:var(--ap-radius-ctl) !important;
+  padding:3px !important;
+  box-shadow:none !important;
+  overflow:hidden;
+}
+.cbi-tabmenu > li,.tabs > ul > li,.cbi-tabmenu > li > a,.tabs > ul > li > a{
+  border:0 !important;
+  background-color:transparent !important;
+  color:var(--ap-label) !important;
+  font-family:var(--ap-font) !important;
+  font-size:13px !important;
+  font-weight:500 !important;
+  border-radius:8px !important;
+  box-shadow:none !important;
+}
+.cbi-tabmenu > li.cbi-tab-active > a,
+.cbi-tabmenu > li.cbi-tab-active,
+.tabs > ul > li.active > a,
+.tabs > ul > li.current > a{
+  background-color:var(--ap-surface) !important;
+  color:var(--ap-label) !important;
+  font-weight:600 !important;
+  box-shadow:0 1px 3px rgba(16,24,40,.14),0 1px 1px rgba(16,24,40,.06) !important;
+}
+.cbi-tabcontainer{border:0 !important;background-color:transparent !important;box-shadow:none !important;padding-left:0 !important;padding-right:0 !important}
+#tabmenu{margin-bottom:1rem}
+
+/* ======================= 12. alerts ======================= */
+.alert,.alert-message{
+  border:0 !important;
+  border-radius:14px !important;
+  background-color:var(--ap-fill) !important;
+  color:var(--ap-label) !important;
+  box-shadow:none !important;
+  text-shadow:none !important;
+  font-weight:400 !important;
+  font-size:14px !important;
+}
+.alert h4,.alert-message h4{
+  background:transparent !important;color:inherit !important;
+  font-weight:600 !important;font-size:15px !important;border-radius:0 !important;padding-left:0 !important;
+}
+.alert-message.notice,.alert.notice{background-color:rgba(0,122,255,.10) !important;color:#0A5FCC !important}
+.alert-message.warning,.alert.warning{background-color:rgba(255,149,0,.13) !important;color:#9A5B00 !important}
+.alert-message.error,.alert.error{background-color:rgba(255,59,48,.12) !important;color:#B3261E !important}
+.alert-message.success,.alert.success{background-color:rgba(52,199,89,.14) !important;color:#1B7A34 !important}
+
+/* ======================= 13. misc widgets ======================= */
+.cbi-progressbar{
+  background-color:var(--ap-fill-strong) !important;
+  border:0 !important;border-radius:999px !important;
+  height:8px !important;overflow:hidden;
+}
+.cbi-progressbar > div{
+  background-color:var(--ap-blue) !important;background-image:none !important;
+  border-radius:999px !important;box-shadow:none !important;
+}
+.cbi-modal,.modal{
+  background-color:var(--ap-surface) !important;
+  border-radius:18px !important;
+  border:1px solid var(--ap-sep) !important;
+  box-shadow:var(--ap-shadow-pop) !important;
+}
+.modal-overlay,.cbi-modal-overlay{background-color:rgba(0,0,0,.28) !important;
+  -webkit-backdrop-filter:blur(6px) !important;backdrop-filter:blur(6px) !important}
+.cbi-tooltip,.cbi-tooltip-container{
+  background-color:var(--ap-surface) !important;color:var(--ap-label) !important;
+  border:1px solid var(--ap-sep) !important;border-radius:10px !important;
+  box-shadow:var(--ap-shadow-pop) !important;font-size:13px !important;
+}
+
+/* network status widgets -> iOS widget tiles */
+.ifacebox{border:1px solid var(--ap-sep) !important;border-radius:14px !important;
+  background-color:var(--ap-surface) !important;box-shadow:var(--ap-shadow-card) !important;overflow:hidden}
+.ifacebox-head{
+  background-color:transparent !important;border-bottom:1px solid var(--ap-sep) !important;
+  color:var(--ap-label) !important;font-weight:600 !important;font-size:13px !important;
+}
+.ifacebox-body{background-color:transparent !important;color:var(--ap-label-2) !important}
+.ifacebadge{
+  background-color:var(--ap-fill) !important;color:var(--ap-label) !important;
+  border:0 !important;border-radius:8px !important;box-shadow:none !important;
+  font-size:12.5px !important;
+}
+.ifacebadge-active{background-color:rgba(52,199,89,.16) !important;color:#1B7A34 !important}
+.node-status .main,.node-status-processes .main{
+  background-color:var(--ap-surface) !important;border:1px solid var(--ap-sep) !important;
+  border-radius:var(--ap-radius-card) !important;box-shadow:var(--ap-shadow-card) !important;
+}
+.badge{background-color:var(--ap-fill) !important;color:var(--ap-label-2) !important;border-radius:999px !important;font-weight:500 !important}
+.zonebadge,.cbi-zonebadge{background-color:var(--ap-fill) !important;border-radius:8px !important;color:var(--ap-label) !important}
+.cbi-section-create,.cbi-section-remove{background-color:transparent !important}
+table.tblsection,.cbi-tblsection table{border-collapse:separate !important;border-spacing:0 !important}
+
+/* ======================= 14. login screen ======================= */
+body:not(.logged-in){
+  background-color:var(--ap-bg) !important;
+}
+body:not(.logged-in) #maincontent,
+body:not(.logged-in) .main-right{background-color:transparent !important}
+body:not(.logged-in) #maincontent > .container,
+body:not(.logged-in) .main-right > .container{
+  max-width:420px;
+  margin:6vh auto 0 auto;
+  padding:2rem 1.75rem;
+  background-color:rgba(255,255,255,.86) !important;
+  -webkit-backdrop-filter:saturate(180%) blur(24px);
+  backdrop-filter:saturate(180%) blur(24px);
+  border:1px solid var(--ap-sep) !important;
+  border-radius:22px !important;
+  box-shadow:var(--ap-shadow-pop) !important;
+}
+body:not(.logged-in) .cbi-map,
+body:not(.logged-in) .cbi-section{
+  background-color:transparent !important;border:0 !important;box-shadow:none !important;
+}
+body:not(.logged-in) .cbi-value-title{text-align:left !important;width:auto !important;display:block !important;float:none !important;padding-right:0 !important;margin-bottom:.25rem}
+body:not(.logged-in) .cbi-value-field{float:none !important;display:block !important}
+body:not(.logged-in) input[type="text"],
+body:not(.logged-in) input[type="password"]{width:100% !important;min-width:0 !important}
+body:not(.logged-in) .cbi-page-actions{
+  background:transparent !important;-webkit-backdrop-filter:none !important;backdrop-filter:none !important;
+  border:0 !important;text-align:center !important;
+}
+body:not(.logged-in) .cbi-button-apply,
+body:not(.logged-in) .cbi-button-save,
+body:not(.logged-in) button[type="submit"],
+body:not(.logged-in) .btn.primary{
+  width:100% !important;margin:0 !important;padding:.7rem 1rem !important;
+  font-size:15px !important;font-weight:600 !important;
+}
+
+/* ======================= 15. footer ======================= */
+footer{
+  background-color:transparent !important;
+  border:0 !important;box-shadow:none !important;
+  color:var(--ap-label-3) !important;
+}
+footer a,footer .luci-link{color:var(--ap-label-3) !important;font-size:12px !important}
+footer,#maincontent > .container > footer{font-size:12px !important}
+.breadcrumb,.breadcrumb a{background:transparent !important;color:var(--ap-label-2) !important;font-size:12px !important}
+
+/* ======================= 16. narrow screens ======================= */
+@media (max-width:992px){
+  header .brand{font-size:16px !important}
+  #maincontent > .container{padding-left:14px;padding-right:14px}
+  .cbi-value-title{width:100% !important;text-align:left !important}
+  body:not(.logged-in) #maincontent > .container{margin-top:3vh;padding:1.5rem 1.25rem}
+}

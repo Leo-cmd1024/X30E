@@ -1,0 +1,158 @@
+/*! x30e-apple-ui v1 — dark counterpart
+ * ---------------------------------------------------------------------------
+ * Appended to the END of argon's dark.css. argon injects dark.css either
+ * inside @media (prefers-color-scheme: dark) (mode=normal) or unconditionally
+ * (mode=dark), and always AFTER cascade.css — so these rules win in dark mode.
+ *
+ * Most of the light skin is token-driven, so re-declaring the --ap-* tokens
+ * below flips the whole UI. The blocks after that only fix values that are
+ * hard-coded in the light layer.
+ * ------------------------------------------------------------------------- */
+
+:root{
+  /* Apple system colors (dark) */
+  --ap-blue:#0A84FF;
+  --ap-blue-soft:rgba(10,132,255,.20);
+  --ap-green:#30D158;
+  --ap-red:#FF453A;
+  --ap-orange:#FF9F0A;
+  --ap-yellow:#FFD60A;
+  --ap-purple:#BF5AF2;
+  --ap-teal:#64D2FF;
+
+  --ap-bg:#000000;                     /* systemBackground (OLED black) */
+  --ap-surface:#1C1C1E;                /* secondarySystemGroupedBackground */
+  --ap-sunken:#1C1C1E;
+  --ap-fill:rgba(120,120,128,.24);     /* systemFill dark */
+  --ap-fill-strong:rgba(120,120,128,.36);
+
+  --ap-label:#FFFFFF;
+  --ap-label-2:rgba(235,235,245,.60);
+  --ap-label-3:rgba(235,235,245,.30);
+  --ap-sep:rgba(84,84,88,.65);         /* separator dark */
+
+  --ap-shadow-card:0 1px 2px rgba(0,0,0,.5),0 14px 32px -16px rgba(0,0,0,.75);
+  --ap-shadow-pop:0 18px 48px -10px rgba(0,0,0,.85),0 2px 10px rgba(0,0,0,.4);
+  --ap-focus-ring:0 0 0 4px rgba(10,132,255,.28);
+
+  /* argon tokens, dark values */
+  --background-color:var(--ap-bg) !important;
+  --menu-bg-color:rgba(28,28,30,.72) !important;
+  --header-bg:rgba(28,28,30,.72) !important;
+  --main-color:var(--ap-blue) !important;
+
+  --white:#FFFFFF !important;
+  --black:#000000 !important;
+  --blue:var(--ap-blue) !important;
+  --red:var(--ap-red) !important;
+  --orange:var(--ap-orange) !important;
+  --yellow:var(--ap-yellow) !important;
+  --green:var(--ap-green) !important;
+  --teal:var(--ap-teal) !important;
+  --gray:#98989D !important;
+  --gray-dark:#8E8E93 !important;
+  --light:#2C2C2E !important;
+  --lighter:#1C1C1E !important;
+  --dark:#E5E5EA !important;
+  --darker:#FFFFFF !important;
+  --neutral:#98989D !important;
+  --default:#98989D !important;
+}
+
+/* ---- hard-coded values from the light layer ---- */
+body{background-color:var(--ap-bg) !important;color:var(--ap-label) !important}
+
+header,
+header.bg-primary{
+  background-color:rgba(28,28,30,.72) !important;
+  border-bottom-color:var(--ap-sep) !important;
+  color:var(--ap-label) !important;
+}
+header .brand,header .flex1 .brand,header a.brand{color:var(--ap-label) !important}
+header .status,header .status *{color:var(--ap-label-2) !important}
+header a.showSide,header a.showSide::before,header a.showSide::after{
+  color:var(--ap-label) !important;background-color:var(--ap-label) !important;
+}
+header #indicators .label,header #indicators .value{color:var(--ap-label) !important}
+
+.main-left{
+  background-color:rgba(28,28,30,.72) !important;
+  border-right-color:var(--ap-sep) !important;
+}
+.main-left .sidenav-header{border-bottom-color:var(--ap-sep)}
+.main-left .sidenav-header .brand{color:var(--ap-label) !important}
+.main-left .nav li a:hover,.main-left ul.nav > li > a:hover{
+  background-color:rgba(120,120,128,.24) !important;
+}
+.main-left .nav .slide > ul > li > a{color:var(--ap-label-2) !important}
+
+.cbi-map,.cbi-section,.cbi-tblsection,.panel,.cbi-section-table,
+.network-status-table .ifacebox,.cbi-modal .cbi-section{
+  background-color:var(--ap-surface) !important;
+  border-color:var(--ap-sep) !important;
+}
+.table .tr:hover{background-color:rgba(10,132,255,.12) !important}
+input[type="text"]:hover,input[type="password"]:hover,input[type="number"]:hover,
+input[type="search"]:hover,textarea:hover,.cbi-input-text:hover{
+  background-color:var(--ap-fill-strong) !important;
+}
+input[type="text"]:focus,input[type="password"]:focus,input[type="number"]:focus,
+input[type="search"]:focus,input[type="email"]:focus,input[type="url"]:focus,
+input[type="tel"]:focus,input[type="date"]:focus,input[type="time"]:focus,
+textarea:focus,.cbi-input-text:focus,.cbi-input-password:focus,.cbi-input-textarea:focus,
+select:focus,.cbi-input-select:focus,.cbi-dropdown:focus,.cbi-dropdown[open],.cbi-dropdown.open{
+  background-color:rgba(120,120,128,.30) !important;
+  border-color:var(--ap-blue) !important;
+  box-shadow:var(--ap-focus-ring) !important;
+}
+.cbi-input-invalid,.cbi-input-invalid:focus{
+  border-color:var(--ap-red) !important;
+  background-color:rgba(255,69,58,.14) !important;
+  box-shadow:0 0 0 4px rgba(255,69,58,.22) !important;
+}
+.cbi-dropdown ul.dropdown,.cbi-dropdown > ul{
+  background-color:var(--ap-surface) !important;border-color:var(--ap-sep) !important;
+}
+.cbi-dynlist > .item,.cbi-dynlist .item{background-color:var(--ap-surface) !important;border-color:var(--ap-sep) !important}
+
+.cbi-button-reset,.cbi-button-negative,.cbi-button-remove,.cbi-button-down{
+  background-color:rgba(255,69,58,.20) !important;color:var(--ap-red) !important;
+}
+.cbi-button-apply,.cbi-button-save,.cbi-button-positive,.cbi-button-action,
+.cbi-button-add,.cbi-button-download,.cbi-button-upload,.cbi-button-success,
+.cbi-button-reload,.cbi-button-up{color:#fff !important}
+
+.cbi-page-actions{
+  background-color:rgba(28,28,30,.82) !important;
+  border-top-color:var(--ap-sep) !important;
+}
+
+.cbi-tabmenu,.tabs,.cbi-tabmenu > ul,.tabs > ul{background-color:var(--ap-fill) !important}
+.cbi-tabmenu > li.cbi-tab-active > a,
+.cbi-tabmenu > li.cbi-tab-active,
+.tabs > ul > li.active > a,
+.tabs > ul > li.current > a{
+  background-color:rgba(120,120,128,.44) !important;
+  color:var(--ap-label) !important;
+  box-shadow:0 1px 3px rgba(0,0,0,.5) !important;
+}
+
+.alert-message.notice,.alert.notice{background-color:rgba(10,132,255,.18) !important;color:#7CC0FF !important}
+.alert-message.warning,.alert.warning{background-color:rgba(255,159,10,.18) !important;color:#FFC46B !important}
+.alert-message.error,.alert.error{background-color:rgba(255,69,58,.18) !important;color:#FF8A80 !important}
+.alert-message.success,.alert.success{background-color:rgba(48,209,88,.18) !important;color:#7BE495 !important}
+
+.ifacebadge-active{background-color:rgba(48,209,88,.22) !important;color:#7BE495 !important}
+.modal-overlay,.cbi-modal-overlay{background-color:rgba(0,0,0,.55) !important}
+
+body:not(.logged-in){
+  background-color:#000 !important;
+}
+body:not(.logged-in) #maincontent > .container,
+body:not(.logged-in) .main-right > .container{
+  background-color:rgba(28,28,30,.86) !important;
+  border-color:var(--ap-sep) !important;
+}
+body:not(.logged-in) .cbi-page-actions{background:transparent !important}
+
+footer,footer a,footer .luci-link,.breadcrumb,.breadcrumb a{color:var(--ap-label-3) !important}
